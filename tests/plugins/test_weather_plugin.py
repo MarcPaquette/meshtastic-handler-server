@@ -1,0 +1,164 @@
+"""Tests for Weather plugin."""
+
+import pytest
+import respx
+from httpx import Response
+
+from meshtastic_handler.interfaces.node_context import GPSLocation, NodeContext
+from meshtastic_handler.plugins.weather_plugin import WeatherPlugin
+
+
+class TestWeatherPlugin:
+    """Tests for WeatherPlugin class."""
+
+    @pytest.fixture
+    def plugin(self) -> WeatherPlugin:
+        """Create a WeatherPlugin."""
+        return WeatherPlugin(timeout=5.0)
+
+    @pytest.fixture
+    def context_with_gps(self) -> NodeContext:
+        """Create test NodeContext with GPS."""
+        return NodeContext(
+            node_id="!test123",
+            location=GPSLocation(latitude=40.7128, longitude=-74.0060),
+        )
+
+    @pytest.fixture
+    def context_no_gps(self) -> NodeContext:
+        """Create test NodeContext without GPS."""
+        return NodeContext(node_id="!test123")
+
+    def test_metadata(self, plugin: WeatherPlugin) -> None:
+        """Test plugin metadata."""
+        meta = plugin.metadata
+        assert meta.name == "Weather"
+        assert meta.menu_number == 3
+        assert "!forecast" in meta.commands
+        assert "!refresh" in meta.commands
+
+    def test_welcome_message(self, plugin: WeatherPlugin) -> None:
+        """Test welcome message."""
+        welcome = plugin.get_welcome_message()
+        assert "Weather" in welcome
+
+    def test_help_text(self, plugin: WeatherPlugin) -> None:
+        """Test help text includes commands."""
+        help_text = plugin.get_help_text()
+        assert "!forecast" in help_text
+        assert "!refresh" in help_text
+        assert "!exit" in help_text
+
+    @pytest.mark.asyncio
+    async def test_no_gps_error(
+        self, plugin: WeatherPlugin, context_no_gps: NodeContext
+    ) -> None:
+        """Test error when no GPS location available."""
+        response = await plugin.handle("!refresh", context_no_gps, {})
+
+        assert "GPS" in response.message or "location" in response.message.lower()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_current_weather(
+        self, plugin: WeatherPlugin, context_with_gps: NodeContext
+    ) -> None:
+        """Test fetching current weather."""
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=Response(
+                200,
+                json={
+                    "current": {
+                        "temperature_2m": 22.5,
+                        "relative_humidity_2m": 65,
+                        "weather_code": 1,
+                        "wind_speed_10m": 15.0,
+                        "wind_direction_10m": 180,
+                    }
+                },
+            )
+        )
+
+        response = await plugin.handle("!refresh", context_with_gps, {})
+
+        assert "22.5" in response.message
+        assert "65%" in response.message
+        assert "Mainly clear" in response.message  # Weather code 1
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_forecast(
+        self, plugin: WeatherPlugin, context_with_gps: NodeContext
+    ) -> None:
+        """Test fetching forecast."""
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=Response(
+                200,
+                json={
+                    "daily": {
+                        "time": ["2024-01-15", "2024-01-16", "2024-01-17"],
+                        "weather_code": [0, 3, 61],
+                        "temperature_2m_max": [25.0, 23.0, 20.0],
+                        "temperature_2m_min": [15.0, 14.0, 12.0],
+                    }
+                },
+            )
+        )
+
+        response = await plugin.handle("!forecast", context_with_gps, {})
+
+        assert "Forecast" in response.message
+        assert "Clear" in response.message  # Weather code 0
+        assert "25" in response.message
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_connection_error(
+        self, plugin: WeatherPlugin, context_with_gps: NodeContext
+    ) -> None:
+        """Test handling connection error."""
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            side_effect=Exception("Connection refused")
+        )
+
+        response = await plugin.handle("!refresh", context_with_gps, {})
+
+        # Should return error message, not crash
+        assert (
+            "error" in response.message.lower()
+            or "connect" in response.message.lower()
+        )
+
+    def test_degrees_to_cardinal(self, plugin: WeatherPlugin) -> None:
+        """Test wind direction conversion."""
+        assert plugin._degrees_to_cardinal(0) == "N"
+        assert plugin._degrees_to_cardinal(45) == "NE"
+        assert plugin._degrees_to_cardinal(90) == "E"
+        assert plugin._degrees_to_cardinal(180) == "S"
+        assert plugin._degrees_to_cardinal(270) == "W"
+        assert plugin._degrees_to_cardinal(360) == "N"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_empty_message_refreshes(
+        self, plugin: WeatherPlugin, context_with_gps: NodeContext
+    ) -> None:
+        """Test that empty message acts as refresh."""
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=Response(
+                200,
+                json={
+                    "current": {
+                        "temperature_2m": 20.0,
+                        "relative_humidity_2m": 50,
+                        "weather_code": 0,
+                        "wind_speed_10m": 10.0,
+                        "wind_direction_10m": 0,
+                    }
+                },
+            )
+        )
+
+        response = await plugin.handle("", context_with_gps, {})
+
+        assert "Current Weather" in response.message
