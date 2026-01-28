@@ -25,6 +25,12 @@ class LLMPlugin(Plugin):
         !exit - Return to main menu
     """
 
+    # Maximum tokens for LLM response (keeps responses concise for radio)
+    MAX_TOKENS = 150
+
+    # Maximum conversation history messages (4 exchanges = 8 messages)
+    MAX_HISTORY_MESSAGES = 8
+
     SYSTEM_PROMPT = (
         "You are a helpful assistant responding via a low-bandwidth radio network. "
         "Keep responses very brief and concise (under 200 characters when possible). "
@@ -113,7 +119,7 @@ class LLMPlugin(Plugin):
         )
 
     async def _handle_list_models(
-        self, current_model: str, history: list
+        self, current_model: str, history: list[dict[str, str]]
     ) -> PluginResponse:
         """Handle the !models command."""
         try:
@@ -148,7 +154,7 @@ class LLMPlugin(Plugin):
             )
 
     async def _handle_switch_model(
-        self, model_name: str, history: list
+        self, model_name: str, history: list[dict[str, str]]
     ) -> PluginResponse:
         """Handle model switching."""
         if not model_name:
@@ -200,7 +206,7 @@ class LLMPlugin(Plugin):
             )
 
     async def _handle_prompt(
-        self, prompt: str, model: str, history: list
+        self, prompt: str, model: str, history: list[dict[str, str]]
     ) -> PluginResponse:
         """Send prompt to Ollama and return response."""
         # Build messages with history
@@ -217,7 +223,7 @@ class LLMPlugin(Plugin):
                         "messages": messages,
                         "stream": False,
                         "options": {
-                            "num_predict": 150,  # Limit tokens for brevity
+                            "num_predict": self.MAX_TOKENS,
                         },
                     },
                 )
@@ -241,8 +247,8 @@ class LLMPlugin(Plugin):
             new_history = history.copy()
             new_history.append({"role": "user", "content": prompt})
             new_history.append({"role": "assistant", "content": assistant_message})
-            if len(new_history) > 8:
-                new_history = new_history[-8:]
+            if len(new_history) > self.MAX_HISTORY_MESSAGES:
+                new_history = new_history[-self.MAX_HISTORY_MESSAGES:]
 
             return PluginResponse(
                 message=assistant_message,

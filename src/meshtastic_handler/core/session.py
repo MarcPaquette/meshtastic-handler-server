@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -20,7 +20,7 @@ class Session:
     """
 
     node_id: str
-    active_plugin: Optional[str] = None
+    active_plugin: str | None = None
     plugin_state: dict[str, Any] = field(default_factory=dict)
     last_activity: datetime = field(default_factory=datetime.now)
 

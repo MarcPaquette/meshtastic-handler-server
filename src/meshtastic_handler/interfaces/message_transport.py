@@ -1,8 +1,8 @@
 """Message transport interface - Abstract base class for transport implementations."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import dataclass
-from typing import AsyncIterator, Callable, Coroutine
 
 from meshtastic_handler.interfaces.node_context import NodeContext
 

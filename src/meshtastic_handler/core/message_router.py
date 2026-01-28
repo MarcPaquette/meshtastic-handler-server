@@ -1,7 +1,7 @@
 """Message router for handling menu selection and plugin routing."""
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from meshtastic_handler.core.plugin_registry import PluginRegistry
 from meshtastic_handler.core.session import Session
@@ -46,7 +46,7 @@ class RouterResponse:
     """
 
     message: str
-    new_plugin_state: Optional[dict[str, Any]] = None
+    new_plugin_state: dict[str, Any] | None = None
 
 
 class MessageRouter:
@@ -141,8 +141,9 @@ class MessageRouter:
             menu_number = int(message)
         except ValueError:
             # Not a number - show menu again
+            menu = self._menu_renderer.render()
             return RouterResponse(
-                message=f"Invalid selection. Please send a number.\n\n{self._menu_renderer.render()}"
+                message=f"Invalid selection. Please send a number.\n\n{menu}"
             )
 
         plugin = self._registry.get_by_menu_number(menu_number)

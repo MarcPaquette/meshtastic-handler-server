@@ -1,6 +1,5 @@
 """Plugin registry for plugin discovery and registration."""
 
-from typing import Optional
 
 from meshtastic_handler.interfaces.plugin import Plugin
 
@@ -57,7 +56,7 @@ class PluginRegistry:
         del self._plugins[name]
         return True
 
-    def get_by_name(self, name: str) -> Optional[Plugin]:
+    def get_by_name(self, name: str) -> Plugin | None:
         """Get a plugin by its name.
 
         Args:
@@ -68,7 +67,7 @@ class PluginRegistry:
         """
         return self._plugins.get(name)
 
-    def get_by_menu_number(self, menu_number: int) -> Optional[Plugin]:
+    def get_by_menu_number(self, menu_number: int) -> Plugin | None:
         """Get a plugin by its menu number.
 
         Args:

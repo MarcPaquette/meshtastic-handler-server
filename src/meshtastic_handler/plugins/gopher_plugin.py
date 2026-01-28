@@ -1,6 +1,5 @@
 """Gopher plugin - Directory-based content navigation."""
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +19,9 @@ class GopherPlugin(Plugin):
         !help - Show help
         !exit - Return to main menu
     """
+
+    # Maximum characters to read from a file before truncating
+    MAX_FILE_CHARS = 500
 
     def __init__(self, root_directory: str = "./gopher_content") -> None:
         """Initialize the Gopher plugin.
@@ -83,8 +85,9 @@ class GopherPlugin(Plugin):
             selection = int(message)
             return self._handle_selection(current, selection)
         except ValueError:
+            listing = self._list_directory(current)
             return PluginResponse(
-                message=f"Invalid input. Send a number or command.\n\n{self._list_directory(current)}",
+                message=f"Invalid input. Send a number or command.\n\n{listing}",
                 plugin_state={"current_path": str(current)},
             )
 
@@ -186,8 +189,10 @@ class GopherPlugin(Plugin):
         except ValueError:
             return "/"
 
-    def _read_file(self, file_path: Path, max_chars: int = 500) -> str:
+    def _read_file(self, file_path: Path, max_chars: int | None = None) -> str:
         """Read file content, truncated to max_chars."""
+        if max_chars is None:
+            max_chars = self.MAX_FILE_CHARS
         try:
             content = file_path.read_text(encoding="utf-8", errors="replace")
             if len(content) > max_chars:

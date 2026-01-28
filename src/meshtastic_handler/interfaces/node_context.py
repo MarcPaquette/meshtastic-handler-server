@@ -1,7 +1,6 @@
 """Node context dataclasses for plugin message handling."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -16,7 +15,7 @@ class GPSLocation:
 
     latitude: float
     longitude: float
-    altitude: Optional[float] = None
+    altitude: float | None = None
 
     def __post_init__(self) -> None:
         """Validate coordinate ranges."""
@@ -39,8 +38,8 @@ class NodeContext:
     """
 
     node_id: str
-    node_name: Optional[str] = None
-    location: Optional[GPSLocation] = None
+    node_name: str | None = None
+    location: GPSLocation | None = None
 
     def __post_init__(self) -> None:
         """Validate node_id format."""

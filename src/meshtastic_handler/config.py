@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -21,8 +21,8 @@ class MeshtasticConfig:
     """Meshtastic connection configuration."""
 
     connection_type: str = "serial"
-    device: Optional[str] = None
-    tcp_host: Optional[str] = None
+    device: str | None = None
+    tcp_host: str | None = None
     tcp_port: int = 4403
 
 
@@ -162,7 +162,7 @@ class Config:
         if not path.exists():
             raise FileNotFoundError(f"Configuration file not found: {path}")
 
-        with open(path, "r") as f:
+        with open(path) as f:
             data = yaml.safe_load(f) or {}
 
         return cls.from_dict(data)

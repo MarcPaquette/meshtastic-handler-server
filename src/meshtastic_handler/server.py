@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from typing import Optional
 
 from meshtastic_handler.config import Config
 from meshtastic_handler.core.content_chunker import ContentChunker
@@ -30,10 +29,13 @@ class HandlerServer:
     - Response chunking for radio limits
     """
 
+    # Delay between sending message chunks (seconds)
+    CHUNK_DELAY_SECONDS = 0.5
+
     def __init__(
         self,
-        config: Optional[Config] = None,
-        transport: Optional[MessageTransport] = None,
+        config: Config | None = None,
+        transport: MessageTransport | None = None,
     ) -> None:
         """Initialize the handler server.
 
@@ -182,7 +184,7 @@ class HandlerServer:
 
             # Small delay between chunks to avoid overwhelming the network
             if len(chunks) > 1:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(self.CHUNK_DELAY_SECONDS)
 
     @property
     def registry(self) -> PluginRegistry:
@@ -200,7 +202,7 @@ class HandlerServer:
         return self._running
 
     async def handle_single_message(
-        self, text: str, node_id: str, node_name: Optional[str] = None
+        self, text: str, node_id: str, node_name: str | None = None
     ) -> str:
         """Handle a single message and return the response.
 

@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from meshtastic_handler.interfaces.node_context import NodeContext
 
@@ -42,7 +42,7 @@ class PluginResponse:
     """
 
     message: str
-    plugin_state: Optional[dict[str, Any]] = None
+    plugin_state: dict[str, Any] | None = None
     exit_plugin: bool = False
 
 
@@ -51,6 +51,30 @@ class Plugin(ABC):
 
     Plugins handle messages when a user has selected them from the main menu.
     Each plugin defines its own commands and maintains state per-node.
+
+    Plugin Lifecycle:
+        1. User selects plugin from menu (by number)
+        2. get_welcome_message() is called and shown to user
+        3. User messages are routed to handle() until they exit
+        4. State persists between handle() calls via plugin_state dict
+        5. User exits with !exit command, returning to main menu
+
+    State Management:
+        Plugins are stateless between calls. Use the plugin_state dict to
+        persist data across messages. Return updated state in PluginResponse.
+
+        Example:
+            async def handle(self, message, context, plugin_state):
+                history = plugin_state.get("history", [])
+                history.append(message)
+                return PluginResponse(
+                    message="Got it!",
+                    plugin_state={"history": history}
+                )
+
+    HTTP Plugins:
+        For plugins that make HTTP requests, inherit from HTTPPluginBase
+        in meshtastic_handler.plugins.base for common error handling.
 
     Example implementation:
         class MyPlugin(Plugin):
@@ -69,7 +93,9 @@ class Plugin(ABC):
             def get_help_text(self) -> str:
                 return "Commands:\\n!do - Do it\\n!undo - Undo it\\n!exit - Return to menu"
 
-            async def handle(self, message: str, context: NodeContext) -> PluginResponse:
+            async def handle(
+                self, message: str, context: NodeContext, plugin_state: dict[str, Any]
+            ) -> PluginResponse:
                 if message == "!do":
                     return PluginResponse(message="Done!")
                 return PluginResponse(message="Unknown command")

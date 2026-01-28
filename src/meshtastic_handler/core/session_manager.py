@@ -1,7 +1,6 @@
 """Session manager for multi-node session management."""
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 from meshtastic_handler.core.session import Session
 
@@ -45,7 +44,7 @@ class SessionManager:
         session.update_activity()
         return session
 
-    def get_existing_session(self, node_id: str) -> Optional[Session]:
+    def get_existing_session(self, node_id: str) -> Session | None:
         """Get an existing session without creating a new one.
 
         Args:

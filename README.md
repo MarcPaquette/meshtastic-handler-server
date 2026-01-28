@@ -160,15 +160,17 @@ uv run pytest tests/ -v
 ```
 meshtastic-handler-server/
 ├── src/meshtastic_handler/
-│   ├── interfaces/          # Abstract base classes
-│   ├── core/               # Plugin registry, routing, sessions
-│   ├── transport/          # Meshtastic transport implementation
-│   └── plugins/            # Built-in plugins
-├── tests/                  # Test suite
-└── config.example.yaml     # Example configuration
+│   ├── interfaces/          # Abstract base classes (Plugin, MessageTransport)
+│   ├── core/                # Plugin registry, routing, sessions, plugin loader
+│   ├── transport/           # Meshtastic transport implementation
+│   └── plugins/             # Built-in plugins and base classes
+├── tests/                   # Test suite
+└── config.example.yaml      # Example configuration
 ```
 
 ### Creating Custom Plugins
+
+#### Basic Plugin
 
 ```python
 from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
@@ -194,6 +196,77 @@ class MyPlugin(Plugin):
         if message == "!do":
             return PluginResponse(message="Done!")
         return PluginResponse(message="Unknown command")
+```
+
+#### Plugin State Management
+
+Plugins are stateless between calls. Use `plugin_state` to persist data:
+
+```python
+async def handle(self, message: str, context: NodeContext, plugin_state: dict) -> PluginResponse:
+    # Read state from previous calls
+    history = plugin_state.get("history", [])
+    history.append(message)
+
+    # Return updated state
+    return PluginResponse(
+        message=f"You've sent {len(history)} messages",
+        plugin_state={"history": history}  # State persists to next call
+    )
+```
+
+#### HTTP Plugins
+
+For plugins that make HTTP requests, inherit from `HTTPPluginBase` for built-in error handling:
+
+```python
+from meshtastic_handler.plugins.base import HTTPPluginBase
+from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
+from meshtastic_handler.interfaces.node_context import NodeContext
+
+class MyAPIPlugin(HTTPPluginBase):
+    def __init__(self):
+        super().__init__(timeout=10.0, service_name="My API")
+
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(name="My API", description="Fetches data", menu_number=5)
+
+    def get_welcome_message(self) -> str:
+        return "My API Plugin"
+
+    def get_help_text(self) -> str:
+        return "Send a query to fetch data"
+
+    async def handle(self, message: str, context: NodeContext, plugin_state: dict) -> PluginResponse:
+        # _fetch_json handles errors and returns PluginResponse on failure
+        data = await self._fetch_json(
+            "https://api.example.com/data",
+            params={"query": message}
+        )
+        if isinstance(data, PluginResponse):
+            return data  # Error occurred, return error response
+
+        return PluginResponse(message=data.get("result", "No result"))
+```
+
+#### Dynamic Plugin Loading
+
+Load plugins dynamically from modules or files:
+
+```python
+from meshtastic_handler.core.plugin_loader import PluginLoader
+
+loader = PluginLoader()
+
+# Load from installed module
+plugin = loader.load_plugin("my_package.plugins.custom")
+
+# Load from file
+plugin = loader.load_plugin_from_file("/path/to/my_plugin.py")
+
+# Discover all plugins in a directory
+plugins = loader.discover_plugins("/path/to/plugins/")
 ```
 
 ## License

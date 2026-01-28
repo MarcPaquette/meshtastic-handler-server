@@ -145,3 +145,58 @@ class TestContentChunker:
         # Should not crash
         for chunk in chunks:
             assert len(chunk) <= 50
+
+    def test_single_word_exceeding_max_size(self) -> None:
+        """Test chunking when a single word exceeds max_size."""
+        chunker = ContentChunker(max_size=30)
+        # A very long word that can't fit in one chunk
+        text = "a" * 60
+
+        chunks = chunker.chunk(text)
+
+        # Should still produce valid chunks
+        assert len(chunks) > 0
+        for chunk in chunks:
+            assert len(chunk) <= 30
+
+    def test_long_word_with_surrounding_text(self) -> None:
+        """Test chunking with long word surrounded by normal text."""
+        chunker = ContentChunker(max_size=50)
+        text = f"Start {'x' * 80} end"
+
+        chunks = chunker.chunk(text)
+
+        # Should produce chunks without crashing
+        assert len(chunks) > 0
+        # Content should be preserved
+        combined = " ".join(c.replace("[...]", "") for c in chunks)
+        assert "Start" in combined
+        assert "end" in combined
+
+    def test_only_continuation_marker_fits(self) -> None:
+        """Test edge case where chunk needs continuation markers."""
+        chunker = ContentChunker(max_size=30)  # minimum is 20
+        text = "word " * 20
+
+        chunks = chunker.chunk(text)
+
+        # All chunks should fit
+        for chunk in chunks:
+            assert len(chunk) <= 30
+
+    def test_reassembled_content_complete(self) -> None:
+        """Test that reassembled chunks contain all original words."""
+        chunker = ContentChunker(max_size=50)
+        text = "The quick brown fox jumps over the lazy dog repeatedly many times"
+
+        chunks = chunker.chunk(text)
+
+        # Reassemble without markers
+        reassembled = ""
+        for chunk in chunks:
+            clean = chunk.replace("[...]", " ").strip()
+            reassembled += clean + " "
+
+        # All words should be present
+        for word in text.split():
+            assert word in reassembled

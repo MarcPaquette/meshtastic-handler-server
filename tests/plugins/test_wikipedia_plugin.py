@@ -233,3 +233,48 @@ class TestWikipediaPlugin:
         response = await plugin.handle("", context, {})
 
         assert "Send a topic" in response.message
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_http_500_error(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        """Test handling of HTTP 500 server error."""
+        respx.get("https://en.wikipedia.org/w/api.php").mock(
+            return_value=Response(500, text="Internal Server Error")
+        )
+
+        response = await plugin.handle("test query", context, {})
+
+        # Should return error message, not crash
+        assert response.message
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_malformed_search_response(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        """Test handling of malformed search response."""
+        respx.get("https://en.wikipedia.org/w/api.php").mock(
+            return_value=Response(
+                200,
+                json={"unexpected": "format"},
+            )
+        )
+
+        response = await plugin.handle("test", context, {})
+
+        # Should handle gracefully
+        assert response.message
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_invalid_selection_number(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        """Test selecting invalid number from results."""
+        state = {"last_results": ["Article 1", "Article 2"]}
+
+        response = await plugin.handle("99", context, state)
+
+        assert response.message  # Should provide feedback

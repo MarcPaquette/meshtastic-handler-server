@@ -7,7 +7,6 @@ from meshtastic_handler.core.plugin_registry import PluginRegistry
 from meshtastic_handler.core.session import Session
 from meshtastic_handler.core.session_manager import SessionManager
 from meshtastic_handler.interfaces.node_context import GPSLocation, NodeContext
-
 from tests.mocks import MockPlugin, MockTransport
 
 

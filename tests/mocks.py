@@ -1,7 +1,8 @@
 """Mock classes for testing."""
 
 import asyncio
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from meshtastic_handler.interfaces.message_transport import (
     IncomingMessage,
@@ -17,7 +18,7 @@ class MockTransport(MessageTransport):
 
     def __init__(self) -> None:
         self._connected = False
-        self._handler: Optional[MessageHandler] = None
+        self._handler: MessageHandler | None = None
         self._message_queue: asyncio.Queue[IncomingMessage] = asyncio.Queue()
         self._sent_messages: list[tuple[str, str]] = []
 
@@ -41,7 +42,7 @@ class MockTransport(MessageTransport):
                     self._message_queue.get(), timeout=0.1
                 )
                 yield message
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
     @property

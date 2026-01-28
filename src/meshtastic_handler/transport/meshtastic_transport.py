@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
 
 from meshtastic_handler.interfaces.message_transport import (
     IncomingMessage,
@@ -23,8 +23,8 @@ class MeshtasticTransport(MessageTransport):
     def __init__(
         self,
         connection_type: str = "serial",
-        device: Optional[str] = None,
-        tcp_host: Optional[str] = None,
+        device: str | None = None,
+        tcp_host: str | None = None,
         tcp_port: int = 4403,
     ) -> None:
         """Initialize the Meshtastic transport.
@@ -41,7 +41,7 @@ class MeshtasticTransport(MessageTransport):
         self._tcp_port = tcp_port
 
         self._interface = None
-        self._message_handler: Optional[MessageHandler] = None
+        self._message_handler: MessageHandler | None = None
         self._connected = False
         self._message_queue: asyncio.Queue[IncomingMessage] = asyncio.Queue()
 
@@ -70,6 +70,12 @@ class MeshtasticTransport(MessageTransport):
                     raise ValueError("tcp_host is required for TCP connections")
                 self._interface = meshtastic.tcp_interface.TCPInterface(
                     hostname=self._tcp_host, portNumber=self._tcp_port
+                )
+            elif self._connection_type == "ble":
+                import meshtastic.ble_interface
+
+                self._interface = meshtastic.ble_interface.BLEInterface(
+                    address=self._device
                 )
             else:
                 raise ValueError(
@@ -155,7 +161,7 @@ class MeshtasticTransport(MessageTransport):
                     self._message_queue.get(), timeout=1.0
                 )
                 yield message
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
     def _on_receive(self, packet: dict, interface: object) -> None:
