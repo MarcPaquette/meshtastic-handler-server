@@ -13,6 +13,10 @@ A gateway server for Meshtastic mesh networks with a plugin architecture. Provid
   - **Wikipedia**: Search and read Wikipedia articles
 - **Message Chunking**: Automatic splitting of long responses for radio limits
 - **Multiple Connection Types**: Serial, TCP, and BLE support
+- **Security Features** (all opt-in):
+  - **Node Filtering**: Allowlist/denylist for access control
+  - **Rate Limiting**: Per-node message throttling
+  - **Session Management**: Automatic cleanup and limits
 
 ## Installation
 
@@ -84,12 +88,14 @@ These commands work anywhere:
 
 ## Configuration
 
-Copy `config.example.yaml` to `config.yaml` and customize:
+Copy `config.sample.yaml` to `config.yaml` and customize:
 
 ```yaml
 server:
   max_message_size: 200
   session_timeout_minutes: 60
+  session_cleanup_interval_minutes: 5  # How often to clean expired sessions
+  max_sessions: 0                      # 0 = unlimited
 
 meshtastic:
   connection_type: serial  # serial, tcp, or ble
@@ -103,6 +109,17 @@ plugins:
     timeout: 10.0
   wikipedia:
     language: "en"
+
+security:
+  # Node filtering (disabled by default)
+  node_allowlist: []         # Empty = allow all
+  node_denylist: []          # Always blocks these nodes
+  require_allowlist: false   # If true, only allowlisted nodes connect
+
+  # Rate limiting (disabled by default)
+  rate_limit_enabled: false
+  rate_limit_messages: 10    # Max messages per window
+  rate_limit_window_seconds: 60
 ```
 
 ## Built-in Plugins
@@ -147,6 +164,51 @@ Commands:
 - `!search <query>` - Search Wikipedia
 - `!random` - Get random article
 
+## Security
+
+All security features are **opt-in** and disabled by default for backwards compatibility.
+
+### Node Filtering
+
+Control which nodes can connect to your server:
+
+```yaml
+security:
+  node_allowlist: ["!abc123", "!def456"]  # Only these nodes allowed
+  node_denylist: ["!spammer"]             # Always blocked
+  require_allowlist: true                  # Enforce allowlist
+```
+
+- **Denylist** always takes precedence (checked first)
+- **Allowlist** only enforced when `require_allowlist: true`
+- Empty lists with `require_allowlist: false` allows all nodes
+
+### Rate Limiting
+
+Prevent message flooding with per-node rate limits:
+
+```yaml
+security:
+  rate_limit_enabled: true
+  rate_limit_messages: 10      # Max 10 messages
+  rate_limit_window_seconds: 60  # Per 60 second window
+```
+
+Uses a sliding window algorithm. Blocked nodes receive a "Rate limited. Try in Xs" response.
+
+### Session Management
+
+Prevent memory exhaustion from abandoned sessions:
+
+```yaml
+server:
+  session_timeout_minutes: 60        # Expire inactive sessions
+  session_cleanup_interval_minutes: 5  # Cleanup frequency
+  max_sessions: 1000                 # Limit concurrent sessions (0 = unlimited)
+```
+
+When `max_sessions` is reached, the oldest (least recently active) session is evicted.
+
 ## Development
 
 ### Running Tests
@@ -165,7 +227,7 @@ meshgate/
 │   ├── transport/           # Meshtastic transport implementation
 │   └── plugins/             # Built-in plugins and base classes
 ├── tests/                   # Test suite
-└── config.example.yaml      # Example configuration
+└── config.sample.yaml       # Example configuration
 ```
 
 ### Creating Custom Plugins
