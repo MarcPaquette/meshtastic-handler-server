@@ -1,6 +1,7 @@
 """Weather plugin - GPS-based weather using Open-Meteo API."""
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from meshgate.constants import WMO_WEATHER_CODES
@@ -158,8 +159,6 @@ class WeatherPlugin(HTTPPluginBase):
         lines = ["3-Day Forecast:"]
         for i, date in enumerate(dates[:3]):
             # Format date as Mon, Tue, etc.
-            from datetime import datetime
-
             try:
                 dt = datetime.fromisoformat(date)
                 day_name = dt.strftime("%a")

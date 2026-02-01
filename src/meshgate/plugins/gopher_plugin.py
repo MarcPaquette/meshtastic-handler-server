@@ -86,28 +86,21 @@ class GopherPlugin(Plugin):
             return self._handle_selection(current, selection)
         except ValueError:
             listing = self._list_directory(current)
-            return PluginResponse(
-                message=f"Invalid input. Send a number or command.\n\n{listing}",
-                plugin_state={"current_path": str(current)},
+            return self._path_response(
+                f"Invalid input. Send a number or command.\n\n{listing}", current
             )
 
     def _handle_back(self, current: Path) -> PluginResponse:
         """Handle the !back command."""
         parent = current.parent
         if self._is_within_root(parent):
-            listing = self._list_directory(parent)
-            return PluginResponse(message=listing, plugin_state={"current_path": str(parent)})
-        else:
-            listing = self._list_directory(self._root)
-            return PluginResponse(
-                message=f"Already at root.\n\n{listing}",
-                plugin_state={"current_path": str(self._root)},
-            )
+            return self._path_response(self._list_directory(parent), parent)
+        listing = self._list_directory(self._root)
+        return self._path_response(f"Already at root.\n\n{listing}", self._root)
 
     def _handle_home(self) -> PluginResponse:
         """Handle the !home command."""
-        listing = self._list_directory(self._root)
-        return PluginResponse(message=listing, plugin_state={"current_path": str(self._root)})
+        return self._path_response(self._list_directory(self._root), self._root)
 
     def _handle_selection(self, current: Path, selection: int) -> PluginResponse:
         """Handle numeric selection."""
@@ -115,9 +108,8 @@ class GopherPlugin(Plugin):
 
         if selection < 1 or selection > len(items):
             listing = self._list_directory(current)
-            return PluginResponse(
-                message=f"Invalid selection. Choose 1-{len(items)}.\n\n{listing}",
-                plugin_state={"current_path": str(current)},
+            return self._path_response(
+                f"Invalid selection. Choose 1-{len(items)}.\n\n{listing}", current
             )
 
         selected = items[selection - 1]
@@ -125,17 +117,14 @@ class GopherPlugin(Plugin):
 
         if selected_path.is_dir():
             # Navigate into directory
-            listing = self._list_directory(selected_path)
-            return PluginResponse(
-                message=listing, plugin_state={"current_path": str(selected_path)}
-            )
-        else:
-            # Read file content
-            content = self._read_file(selected_path)
-            return PluginResponse(
-                message=f"{selected}:\n{content}",
-                plugin_state={"current_path": str(current)},
-            )
+            return self._path_response(self._list_directory(selected_path), selected_path)
+        # Read file content
+        content = self._read_file(selected_path)
+        return self._path_response(f"{selected}:\n{content}", current)
+
+    def _path_response(self, message: str, path: Path) -> PluginResponse:
+        """Create a response that preserves the current path in state."""
+        return PluginResponse(message=message, plugin_state={"current_path": str(path)})
 
     def _is_within_root(self, path: Path) -> bool:
         """Check if path is within root directory."""
