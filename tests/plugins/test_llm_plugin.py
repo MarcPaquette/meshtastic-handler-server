@@ -37,63 +37,21 @@ class TestLLMPlugin:
     @pytest.mark.asyncio
     async def test_clear_command(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test !clear clears history."""
-        state = {"model": "test-model", "history": [{"role": "user", "content": "hi"}]}
+        state = {"history": [{"role": "user", "content": "hi"}]}
         response = await plugin.handle("!clear", context, state)
 
         assert "cleared" in response.message.lower()
         assert response.plugin_state["history"] == []
 
     @pytest.mark.asyncio
-    @respx.mock
-    async def test_list_models(self, plugin: LLMPlugin, context: NodeContext) -> None:
-        """Test !models lists available models."""
-        respx.get("http://localhost:11434/api/tags").mock(
-            return_value=Response(
-                200,
-                json={
-                    "models": [
-                        {"name": "llama3.2"},
-                        {"name": "mistral"},
-                    ]
-                },
-            )
-        )
+    async def test_model_command_shows_current(
+        self, plugin: LLMPlugin, context: NodeContext
+    ) -> None:
+        """Test !model shows the current configured model."""
+        response = await plugin.handle("!model", context, {})
 
-        response = await plugin.handle("!models", context, {})
-
-        assert "llama3.2" in response.message
-        assert "mistral" in response.message
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_switch_model(self, plugin: LLMPlugin, context: NodeContext) -> None:
-        """Test !model switches to specified model."""
-        respx.get("http://localhost:11434/api/tags").mock(
-            return_value=Response(
-                200,
-                json={"models": [{"name": "mistral"}]},
-            )
-        )
-
-        response = await plugin.handle("!model mistral", context, {})
-
-        assert "Switched to mistral" in response.message
-        assert response.plugin_state["model"] == "mistral"
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_switch_model_not_found(self, plugin: LLMPlugin, context: NodeContext) -> None:
-        """Test switching to non-existent model."""
-        respx.get("http://localhost:11434/api/tags").mock(
-            return_value=Response(
-                200,
-                json={"models": [{"name": "llama3.2"}]},
-            )
-        )
-
-        response = await plugin.handle("!model nonexistent", context, {})
-
-        assert "not found" in response.message.lower()
+        assert "test-model" in response.message
+        assert "Current model" in response.message
 
     @pytest.mark.asyncio
     @respx.mock
@@ -111,7 +69,7 @@ class TestLLMPlugin:
             )
         )
 
-        response = await plugin.handle("Hello", context, {"model": "test-model", "history": []})
+        response = await plugin.handle("Hello", context, {"history": []})
 
         assert "Test response from LLM" in response.message
         assert len(response.plugin_state["history"]) == 2
@@ -133,7 +91,7 @@ class TestLLMPlugin:
             )
         )
 
-        response = await plugin.handle("Hello", context, {"model": "test-model", "history": []})
+        response = await plugin.handle("Hello", context, {"history": []})
 
         assert len(response.message) <= 400
         assert response.message.endswith("...")
@@ -157,7 +115,7 @@ class TestLLMPlugin:
         # Start with long history
         long_history = [{"role": "user", "content": f"msg{i}"} for i in range(20)]
         response = await plugin.handle(
-            "New message", context, {"model": "test-model", "history": long_history}
+            "New message", context, {"history": long_history}
         )
 
         # History should be trimmed

@@ -17,9 +17,8 @@ class LLMPlugin(HTTPPluginBase):
     Optimized for short responses suitable for Meshtastic.
 
     Commands:
-        !model <name> - Switch to different model
+        !model - Show current model
         !clear - Clear conversation history
-        !models - List available models
         !help - Show help
         !exit - Return to main menu
     """
@@ -64,7 +63,7 @@ class LLMPlugin(HTTPPluginBase):
             name="LLM Assistant",
             description="Ask AI questions",
             menu_number=2,
-            commands=("!model", "!clear", "!models", "!help", "!exit"),
+            commands=("!model", "!clear", "!help", "!exit"),
         )
 
     def get_welcome_message(self) -> str:
@@ -79,8 +78,7 @@ class LLMPlugin(HTTPPluginBase):
         return (
             "LLM Commands:\n"
             "[message] - Ask a question\n"
-            "!model <name> - Switch model\n"
-            "!models - List models\n"
+            "!model - Show current model\n"
             "!clear - Clear history\n"
             "!help - Show this help\n"
             "!exit - Return to menu"
@@ -92,100 +90,30 @@ class LLMPlugin(HTTPPluginBase):
         """Handle a message while user is in this plugin."""
         message = message.strip()
 
-        # Get current model from state
-        current_model = plugin_state.get("model", self._default_model)
         history = plugin_state.get("history", [])
 
         # Handle commands
         if message.lower() == "!clear":
-            return self._handle_clear(current_model)
+            return self._handle_clear()
 
-        if message.lower() == "!models":
-            return await self._handle_list_models(current_model, history)
-
-        if message.lower().startswith("!model "):
-            model_name = message[7:].strip()
-            return await self._handle_switch_model(model_name, history)
+        if message.lower() == "!model":
+            return PluginResponse(
+                message=f"Current model: {self._default_model}",
+                plugin_state={"history": history},
+            )
 
         # Regular message - send to LLM
-        return await self._handle_prompt(message, current_model, history)
+        return await self._handle_prompt(message, history)
 
-    def _handle_clear(self, current_model: str) -> PluginResponse:
+    def _handle_clear(self) -> PluginResponse:
         """Handle the !clear command."""
         return PluginResponse(
             message="Conversation cleared.",
-            plugin_state={"model": current_model, "history": []},
-        )
-
-    async def _handle_list_models(
-        self, current_model: str, history: list[dict[str, str]]
-    ) -> PluginResponse:
-        """Handle the !models command."""
-        result = await self._fetch_json(f"{self._ollama_url}/api/tags")
-
-        if isinstance(result, PluginResponse):
-            return PluginResponse(
-                message=result.message,
-                plugin_state={"model": current_model, "history": history},
-            )
-
-        models = [m["name"] for m in result.get("models", [])]
-        if not models:
-            return PluginResponse(
-                message="No models found.",
-                plugin_state={"model": current_model, "history": history},
-            )
-
-        model_list = ", ".join(models[:10])  # Limit to first 10
-        return PluginResponse(
-            message=f"Models: {model_list}\nCurrent: {current_model}",
-            plugin_state={"model": current_model, "history": history},
-        )
-
-    async def _handle_switch_model(
-        self, model_name: str, history: list[dict[str, str]]
-    ) -> PluginResponse:
-        """Handle model switching."""
-        if not model_name:
-            return PluginResponse(
-                message="Usage: !model <name>",
-                plugin_state={"model": self._default_model, "history": history},
-            )
-
-        # Verify model exists
-        result = await self._fetch_json(f"{self._ollama_url}/api/tags")
-
-        if isinstance(result, PluginResponse):
-            return PluginResponse(
-                message=result.message,
-                plugin_state={"model": self._default_model, "history": history},
-            )
-
-        models = [m["name"] for m in result.get("models", [])]
-        # Check for exact match or partial match
-        if model_name not in models:
-            # Try partial match
-            matches = [m for m in models if model_name in m]
-            if len(matches) == 1:
-                model_name = matches[0]
-            elif matches:
-                return PluginResponse(
-                    message=f"Multiple matches: {', '.join(matches[:5])}",
-                    plugin_state={"model": self._default_model, "history": history},
-                )
-            else:
-                return PluginResponse(
-                    message=f"Model '{model_name}' not found.",
-                    plugin_state={"model": self._default_model, "history": history},
-                )
-
-        return PluginResponse(
-            message=f"Switched to {model_name}. History cleared.",
-            plugin_state={"model": model_name, "history": []},
+            plugin_state={"history": []},
         )
 
     async def _handle_prompt(
-        self, prompt: str, model: str, history: list[dict[str, str]]
+        self, prompt: str, history: list[dict[str, str]]
     ) -> PluginResponse:
         """Send prompt to Ollama and return response."""
         # Build messages with history
@@ -196,7 +124,7 @@ class LLMPlugin(HTTPPluginBase):
         result = await self._post_json(
             f"{self._ollama_url}/api/chat",
             json_data={
-                "model": model,
+                "model": self._default_model,
                 "messages": messages,
                 "stream": False,
                 "options": {
@@ -208,14 +136,14 @@ class LLMPlugin(HTTPPluginBase):
         if isinstance(result, PluginResponse):
             return PluginResponse(
                 message=result.message,
-                plugin_state={"model": model, "history": history},
+                plugin_state={"history": history},
             )
 
         assistant_message = result.get("message", {}).get("content", "")
         if not assistant_message:
             return PluginResponse(
                 message="No response from model.",
-                plugin_state={"model": model, "history": history},
+                plugin_state={"history": history},
             )
 
         assistant_message = self._truncate(assistant_message, self._max_response_length)
@@ -229,5 +157,5 @@ class LLMPlugin(HTTPPluginBase):
 
         return PluginResponse(
             message=assistant_message,
-            plugin_state={"model": model, "history": new_history},
+            plugin_state={"history": new_history},
         )
