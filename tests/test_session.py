@@ -74,6 +74,41 @@ class TestSession:
         assert session.active_plugin == "Plugin B"
         assert session.plugin_state == {}
 
+    def test_update_plugin_state_within_limit(self) -> None:
+        """Test state update succeeds within size limit."""
+        session = Session(node_id="!abc123")
+        result = session.update_plugin_state({"key": "value"}, max_bytes=1024)
+        assert result is True
+        assert session.plugin_state == {"key": "value"}
+
+    def test_update_plugin_state_exceeds_limit(self) -> None:
+        """Test state update rejected when exceeding limit."""
+        session = Session(node_id="!abc123")
+        large_data = {"key": "x" * 10000}
+        result = session.update_plugin_state(large_data, max_bytes=1024)
+        assert result is False
+        assert session.plugin_state == {}  # Unchanged
+
+    def test_update_plugin_state_unlimited(self) -> None:
+        """Test state update with no limit (max_bytes=0)."""
+        session = Session(node_id="!abc123")
+        large_data = {"key": "x" * 10000}
+        result = session.update_plugin_state(large_data, max_bytes=0)
+        assert result is True
+        assert session.plugin_state == large_data
+
+    def test_update_plugin_state_checks_merged_size(self) -> None:
+        """Test that size check considers existing + new state."""
+        session = Session(node_id="!abc123")
+        # First update succeeds
+        session.update_plugin_state({"existing": "x" * 500}, max_bytes=2048)
+        # Second update that would push over limit fails
+        result = session.update_plugin_state({"new": "y" * 1500}, max_bytes=2048)
+        assert result is False
+        # Original state preserved
+        assert "existing" in session.plugin_state
+        assert "new" not in session.plugin_state
+
 
 class TestSessionManager:
     """Tests for SessionManager class."""

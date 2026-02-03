@@ -1,9 +1,13 @@
 """Message router for handling menu selection and plugin routing."""
 
+import logging
+
 from meshgate.core.plugin_registry import PluginRegistry
 from meshgate.core.session import Session
 from meshgate.interfaces.node_context import NodeContext
 from meshgate.interfaces.plugin import PluginResponse
+
+logger = logging.getLogger(__name__)
 
 
 class MessageRouter:
@@ -22,13 +26,15 @@ class MessageRouter:
     MENU_COMMAND = "!menu"
     HELP_COMMAND = "!help"
 
-    def __init__(self, registry: PluginRegistry) -> None:
+    def __init__(self, registry: PluginRegistry, max_state_bytes: int = 0) -> None:
         """Initialize the message router.
 
         Args:
             registry: The plugin registry containing available plugins
+            max_state_bytes: Maximum allowed plugin state size in bytes (0 = unlimited)
         """
         self._registry = registry
+        self._max_state_bytes = max_state_bytes
 
     def _render_menu(self) -> str:
         """Render the main menu showing available plugins.
@@ -147,7 +153,11 @@ class MessageRouter:
 
         # Update state if provided
         if response.plugin_state is not None:
-            session.update_plugin_state(response.plugin_state)
+            if not session.update_plugin_state(response.plugin_state, self._max_state_bytes):
+                logger.warning(
+                    f"Plugin state exceeded limit for {session.node_id} "
+                    f"(limit: {self._max_state_bytes} bytes)"
+                )
 
         # Check if plugin wants to exit
         if response.exit_plugin:

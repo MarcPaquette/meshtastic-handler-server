@@ -297,3 +297,47 @@ class TestMessageRouter:
         assert len(plugin.handle_calls) == 1
         passed_state = plugin.handle_calls[0][2]
         assert passed_state.get("existing") == "state"
+
+    @pytest.mark.asyncio
+    async def test_state_limit_enforced_during_routing(self) -> None:
+        """Test that state size limit is enforced when routing messages."""
+        registry = PluginRegistry()
+        # Create a plugin that returns large state
+        plugin = MockPlugin(
+            name="Large State Plugin",
+            menu_number=1,
+            response_state={"large": "x" * 10000},
+        )
+        registry.register(plugin)
+        # Router with small state limit
+        router = MessageRouter(registry, max_state_bytes=1024)
+
+        session = Session(node_id="!test123")
+        session.enter_plugin("Large State Plugin")
+        context = NodeContext(node_id="!test123")
+
+        await router.route("test", session, context)
+
+        # State should NOT be updated because it exceeds limit
+        assert "large" not in session.plugin_state
+
+    @pytest.mark.asyncio
+    async def test_state_update_succeeds_within_limit(self) -> None:
+        """Test that state updates succeed when within limit."""
+        registry = PluginRegistry()
+        plugin = MockPlugin(
+            name="Small State Plugin",
+            menu_number=1,
+            response_state={"small": "value"},
+        )
+        registry.register(plugin)
+        router = MessageRouter(registry, max_state_bytes=10240)
+
+        session = Session(node_id="!test123")
+        session.enter_plugin("Small State Plugin")
+        context = NodeContext(node_id="!test123")
+
+        await router.route("test", session, context)
+
+        # State should be updated
+        assert session.plugin_state.get("small") == "value"

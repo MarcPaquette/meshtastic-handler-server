@@ -63,11 +63,13 @@ class MockPlugin(Plugin):
         menu_number: int = 99,
         welcome: str = "Welcome to mock",
         help_text: str = "Mock help",
+        response_state: dict[str, Any] | None = None,
     ) -> None:
         self._name = name
         self._menu_number = menu_number
         self._welcome = welcome
         self._help_text = help_text
+        self._response_state = response_state
         self._handle_calls: list[tuple[str, NodeContext, dict]] = []
 
     @property
@@ -89,9 +91,13 @@ class MockPlugin(Plugin):
         self, message: str, context: NodeContext, plugin_state: dict[str, Any]
     ) -> PluginResponse:
         self._handle_calls.append((message, context, plugin_state))
+        if self._response_state is not None:
+            state = self._response_state
+        else:
+            state = {"last_message": message}
         return PluginResponse(
             message=f"Mock response to: {message}",
-            plugin_state={"last_message": message},
+            plugin_state=state,
         )
 
     @property

@@ -64,7 +64,10 @@ class HandlerServer:
             session_timeout_minutes=self._config.server.session_timeout_minutes,
             max_sessions=self._config.server.max_sessions,
         )
-        self._router = MessageRouter(self._registry)
+        self._router = MessageRouter(
+            self._registry,
+            max_state_bytes=self._config.security.max_plugin_state_bytes,
+        )
         self._chunker = ContentChunker(max_size=self._config.server.max_message_size)
 
     def _setup_security(self) -> None:

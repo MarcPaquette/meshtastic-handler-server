@@ -134,6 +134,9 @@ class SecurityConfig:
     rate_limit_messages: int = 10  # Max messages per window
     rate_limit_window_seconds: int = 60
 
+    # Plugin state limits
+    max_plugin_state_bytes: int = 10240  # 10 KB default (0 = unlimited)
+
 
 @dataclass
 class Config:

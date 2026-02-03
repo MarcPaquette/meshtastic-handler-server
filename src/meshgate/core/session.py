@@ -1,5 +1,6 @@
 """Session dataclass for tracking per-node state."""
 
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -49,14 +50,26 @@ class Session:
         self.plugin_state = {}
         self.update_activity()
 
-    def update_plugin_state(self, state: dict[str, Any]) -> None:
+    def update_plugin_state(self, state: dict[str, Any], max_bytes: int = 0) -> bool:
         """Update the plugin-specific state.
 
         Args:
             state: State dictionary to merge with existing state
+            max_bytes: Maximum allowed state size in bytes (0 = unlimited)
+
+        Returns:
+            True if update succeeded, False if state would exceed limit
         """
+        if max_bytes > 0:
+            # Calculate size of merged state
+            merged = {**self.plugin_state, **state}
+            size = sys.getsizeof(merged) + sum(sys.getsizeof(v) for v in merged.values())
+            if size > max_bytes:
+                return False
+
         self.plugin_state.update(state)
         self.update_activity()
+        return True
 
     @property
     def is_at_menu(self) -> bool:
