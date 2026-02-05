@@ -45,6 +45,9 @@ security:
   rate_limit_messages: 10        # Max messages per window
   rate_limit_window_seconds: 60  # Sliding window size in seconds
 
+  # Plugin state limits
+  max_plugin_state_bytes: 10240  # Max size of plugin state per session (bytes)
+
 # External plugin loading (DISABLED by default for security)
 # WARNING: Plugins execute arbitrary Python with full system access.
 # Only enable if you trust the plugin source.
