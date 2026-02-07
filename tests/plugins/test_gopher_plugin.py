@@ -70,11 +70,12 @@ class TestGopherPlugin:
                 folder_num = line.split(".")[0].strip()
                 break
 
-        if folder_num:
-            response = await plugin.handle(
-                folder_num, context, {"current_path": str(temp_gopher_dir)}
-            )
-            assert "/folder1" in response.message or "nested.txt" in response.message
+        assert folder_num is not None, "folder1/ not found in menu listing"
+        response = await plugin.handle(
+            folder_num, context, {"current_path": str(temp_gopher_dir)}
+        )
+        assert "/folder1" in response.message
+        assert "nested.txt" in response.message
 
     @pytest.mark.asyncio
     async def test_select_file(
@@ -92,11 +93,11 @@ class TestGopherPlugin:
                 file_num = line.split(".")[0].strip()
                 break
 
-        if file_num:
-            response = await plugin.handle(
-                file_num, context, {"current_path": str(temp_gopher_dir)}
-            )
-            assert "Content of file 1" in response.message
+        assert file_num is not None, "file1.txt not found in menu listing"
+        response = await plugin.handle(
+            file_num, context, {"current_path": str(temp_gopher_dir)}
+        )
+        assert "Content of file 1" in response.message
 
     @pytest.mark.asyncio
     async def test_back_command(

@@ -144,5 +144,6 @@ class TestWeatherPlugin:
 
         response = await plugin.handle("!refresh", context_with_gps, {})
 
-        # Should handle gracefully
-        assert response.message  # Non-empty response
+        # Should degrade gracefully with "?" placeholders for missing data
+        assert "Current Weather:" in response.message
+        assert "?" in response.message

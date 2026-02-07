@@ -78,35 +78,33 @@ class TestContentChunker:
 
         chunks = chunker.chunk(text)
 
-        # Multiple chunks should be created
         assert len(chunks) >= 2
 
-        # Each chunk should not break in the middle of a word
-        # (i.e., no chunks should end with a partial word followed by [...]
-        # where the partial would be completed in the next chunk)
-        for i, chunk in enumerate(chunks[:-1]):
-            # Remove markers and get clean text
-            clean = chunk.replace("[...]", "").strip()
-            # Words in the original text
-            words = text.split()
-            # The clean text should end with a complete word from the original
-            if clean:
-                last_word = clean.split()[-1] if clean.split() else ""
-                assert last_word in words or not last_word
+        # Each non-final chunk should break at a word boundary:
+        # the character just before " [...]" should not be mid-word
+        words = set(text.split())
+        for chunk in chunks[:-1]:
+            clean = chunk.replace(" [...]", "").strip()
+            assert clean, "Chunk should have content before the marker"
+            last_word = clean.split()[-1]
+            assert last_word in words, f"'{last_word}' is not a complete word from the original"
 
     def test_sentence_boundary_break(self) -> None:
         """Test chunker prefers sentence boundaries."""
-        chunker = ContentChunker(max_size=100)
+        chunker = ContentChunker(max_size=60)
         text = "First sentence here. Second sentence here. Third sentence here. Fourth sentence."
 
         chunks = chunker.chunk(text)
 
-        # Check that breaks happen at sentence boundaries when possible
+        assert len(chunks) >= 2
+
+        # Non-final chunks should break at sentence boundaries
+        # (the content before " [...]" should end with sentence punctuation)
         for chunk in chunks[:-1]:
-            clean = chunk.replace("[...]", "").strip()
-            # Should end with sentence punctuation when possible
-            if len(clean) > 50:
-                assert any(clean.endswith(p) for p in (".", "!", "?", " "))
+            clean = chunk.replace(" [...]", "").strip()
+            assert clean.endswith((".", "!", "?")), (
+                f"Expected chunk to break at sentence boundary, got: '{clean[-20:]}'"
+            )
 
     def test_invalid_max_size(self) -> None:
         """Test that invalid max_size raises error."""

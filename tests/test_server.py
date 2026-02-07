@@ -121,7 +121,7 @@ class TestHandlerServerSingleMessage:
         # Select plugin 1 (Gopher)
         response = await server.handle_single_message("1", node_id="!test123")
 
-        assert response  # Non-empty response
+        assert "Gopher Server" in response
         session = server.session_manager.get_existing_session("!test123")
         assert session is not None
         assert not session.is_at_menu
@@ -174,13 +174,13 @@ class TestHandlerServerSingleMessage:
         await server.handle_single_message("", node_id="!test123")
         await server.handle_single_message("1", node_id="!test123")
 
-        # Navigate somewhere (state should update)
-        await server.handle_single_message("!help", node_id="!test123")
+        # Navigate to home (sets current_path in plugin state)
+        await server.handle_single_message("!home", node_id="!test123")
 
         session = server.session_manager.get_existing_session("!test123")
         assert session is not None
-        # Session should maintain plugin state
-        assert session.active_plugin is not None
+        assert session.active_plugin == "Gopher Server"
+        assert "current_path" in session.plugin_state
 
 
 class TestHandlerServerLifecycle:
@@ -230,12 +230,14 @@ class TestHandlerServerLifecycle:
             mock_transport.inject_message("", node_id="!test123")
             await asyncio.sleep(0.5)
 
-        # Should have at least one message sent
-        assert len(mock_transport.sent_messages) >= 1
-        # The response should contain continuation marker if chunked
+        # Menu response is longer than 30 chars, so must be chunked into multiple messages
+        assert len(mock_transport.sent_messages) > 1
+        # First chunk should end with continuation marker
         _, first_message = mock_transport.sent_messages[0]
-        # Either single message or first chunk with marker
-        assert first_message  # Non-empty
+        assert first_message.endswith("[...]")
+        # All chunks should respect the size limit
+        for _, msg in mock_transport.sent_messages:
+            assert len(msg) <= 30
 
 
 class TestHandlerServerCleanup:

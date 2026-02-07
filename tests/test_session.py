@@ -56,12 +56,13 @@ class TestSession:
     def test_update_activity(self) -> None:
         """Test activity timestamp update."""
         session = Session(node_id="!test123")
-        old_time = session.last_activity
+        # Set last_activity to a known past time
+        past = datetime(2020, 1, 1)
+        session.last_activity = past
 
         session.update_activity()
 
-        # Compare with tolerance - new time should be >= old time
-        assert session.last_activity >= old_time
+        assert session.last_activity > past
 
     def test_enter_plugin_clears_state(self) -> None:
         """Test that entering a new plugin clears old state."""

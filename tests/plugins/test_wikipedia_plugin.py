@@ -200,17 +200,22 @@ class TestWikipediaPlugin:
 
         response = await plugin.handle("test", context, {})
 
-        # Should handle gracefully
-        assert response.message
+        # Malformed response has no titles list, should report no results
+        assert "No results" in response.message
 
     @pytest.mark.asyncio
     @respx.mock
     async def test_invalid_selection_number(
         self, plugin: WikipediaPlugin, context: NodeContext
     ) -> None:
-        """Test selecting invalid number from results."""
+        """Test selecting invalid number from results falls through to search."""
         state = {"last_results": ["Article 1", "Article 2"]}
+
+        # "99" is out of range (1-2), so it falls through to _handle_search("99")
+        respx.get("https://en.wikipedia.org/w/api.php").mock(
+            return_value=Response(200, json=["99", [], [], []])
+        )
 
         response = await plugin.handle("99", context, state)
 
-        assert response.message  # Should provide feedback
+        assert "No results" in response.message
