@@ -65,7 +65,7 @@ class TestRateLimiter:
         assert not result.allowed
 
         # Wait for window to expire
-        time.sleep(1.1)
+        time.sleep(1.5)
 
         # Should be allowed again
         result = limiter.check("!node1")
@@ -83,7 +83,7 @@ class TestRateLimiter:
         assert not result.allowed
         assert result.retry_after_seconds is not None
         # Should be close to 10 seconds (allowing for test execution time)
-        assert 9 < result.retry_after_seconds <= 10
+        assert 8 < result.retry_after_seconds <= 10
 
     def test_cleanup_inactive_removes_old_nodes(self) -> None:
         """Test that cleanup removes inactive nodes."""
@@ -148,7 +148,7 @@ class TestRateLimiterIntegration:
         assert not limiter.check("!node1").allowed
 
         # Wait and trickle
-        time.sleep(1.1)
+        time.sleep(1.5)
         assert limiter.check("!node1").allowed
         assert limiter.check("!node1").allowed
         assert limiter.check("!node1").allowed

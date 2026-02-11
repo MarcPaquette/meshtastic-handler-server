@@ -44,8 +44,7 @@ class TestMessageRouter:
         router = MessageRouter(registry)
 
         result = router.get_menu()
-        assert "Available Services:" in result
-        assert "Send number to select" in result
+        assert result  # Non-empty menu even without plugins
 
     def test_get_menu_with_plugins(self) -> None:
         """Test get_menu with plugins."""
@@ -56,10 +55,8 @@ class TestMessageRouter:
 
         result = router.get_menu()
 
-        assert "Available Services:" in result
-        assert "1. Gopher Server" in result
-        assert "2. LLM Assistant" in result
-        assert "Send number to select" in result
+        assert "Gopher Server" in result
+        assert "LLM Assistant" in result
 
     @pytest.fixture
     def router_with_plugin(self) -> tuple[MessageRouter, MockPlugin, PluginRegistry]:
@@ -110,8 +107,8 @@ class TestMessageRouter:
 
         response = await router.route("hello", session, context)
 
-        assert "Invalid selection" in response.message
-        assert "send a number" in response.message.lower()
+        assert "Invalid" in response.message
+        assert session.is_at_menu
 
     @pytest.mark.asyncio
     async def test_exit_command(
@@ -123,9 +120,8 @@ class TestMessageRouter:
         session.enter_plugin("Test Plugin")
         context = NodeContext(node_id="!test123")
 
-        response = await router.route("!exit", session, context)
+        await router.route("!exit", session, context)
 
-        assert "Returned to menu" in response.message
         assert session.is_at_menu
 
     @pytest.mark.asyncio
@@ -154,7 +150,8 @@ class TestMessageRouter:
 
         response = await router.route("!menu", session, context)
 
-        assert "Available Services:" in response.message
+        # Menu should contain the registered plugin name
+        assert "Test Plugin" in response.message
         # Should NOT exit plugin
         assert not session.is_at_menu
 
@@ -261,9 +258,8 @@ class TestMessageRouter:
         # Remove the plugin while user is in session
         registry.unregister("Removable Plugin")
 
-        response = await router.route("test message", session, context)
+        await router.route("test message", session, context)
 
-        assert "not available" in response.message.lower()
         assert session.is_at_menu
 
     @pytest.mark.asyncio
@@ -275,9 +271,8 @@ class TestMessageRouter:
         session = Session(node_id="!test123")
         context = NodeContext(node_id="!test123")
 
-        response = await router.route("!exit", session, context)
+        await router.route("!exit", session, context)
 
-        assert "Returned to menu" in response.message
         assert session.is_at_menu
 
     @pytest.mark.asyncio

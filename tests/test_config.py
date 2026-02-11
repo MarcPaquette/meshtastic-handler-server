@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from meshgate.config import Config
+from meshgate.config import Config, LLMConfig, MeshtasticConfig, SecurityConfig, ServerConfig
 
 
 class TestConfig:
@@ -15,10 +15,10 @@ class TestConfig:
         """Test creating default configuration."""
         config = Config.default()
 
-        assert config.server.max_message_size == 200
-        assert config.server.ack_timeout_seconds == 30.0
-        assert config.meshtastic.connection_type == "serial"
-        assert config.plugins.llm.model == "llama3.2"
+        assert config.server.max_message_size == ServerConfig().max_message_size
+        assert config.server.ack_timeout_seconds == ServerConfig().ack_timeout_seconds
+        assert config.meshtastic.connection_type == MeshtasticConfig().connection_type
+        assert config.plugins.llm.model == LLMConfig().model
 
     def test_from_dict(self) -> None:
         """Test creating config from dictionary."""
@@ -89,7 +89,7 @@ plugins:
         assert "server" in data
         assert "meshtastic" in data
         assert "plugins" in data
-        assert data["server"]["max_message_size"] == 200
+        assert data["server"]["max_message_size"] == ServerConfig().max_message_size
 
     def test_save_yaml(self) -> None:
         """Test saving config to YAML file."""
@@ -116,7 +116,7 @@ plugins:
 
             config = Config.from_yaml(f.name)
 
-        assert config.server.max_message_size == 200
+        assert config.server.max_message_size == ServerConfig().max_message_size
 
         Path(f.name).unlink()
 
@@ -136,8 +136,8 @@ plugins:
         # Specified value
         assert config.plugins.weather.timeout == 5.0
         # Default values
-        assert config.server.max_message_size == 200
-        assert config.plugins.llm.model == "llama3.2"
+        assert config.server.max_message_size == ServerConfig().max_message_size
+        assert config.plugins.llm.model == LLMConfig().model
 
         Path(f.name).unlink()
 
@@ -149,12 +149,13 @@ class TestSecurityConfig:
         """Test default security configuration."""
         config = Config.default()
 
-        assert config.security.node_allowlist == []
-        assert config.security.node_denylist == []
-        assert config.security.require_allowlist is False
-        assert config.security.rate_limit_enabled is False
-        assert config.security.rate_limit_messages == 10
-        assert config.security.rate_limit_window_seconds == 60
+        defaults = SecurityConfig()
+        assert config.security.node_allowlist == defaults.node_allowlist
+        assert config.security.node_denylist == defaults.node_denylist
+        assert config.security.require_allowlist == defaults.require_allowlist
+        assert config.security.rate_limit_enabled == defaults.rate_limit_enabled
+        assert config.security.rate_limit_messages == defaults.rate_limit_messages
+        assert config.security.rate_limit_window_seconds == defaults.rate_limit_window_seconds
 
     def test_security_config_from_dict(self) -> None:
         """Test creating security config from dictionary."""

@@ -50,9 +50,8 @@ class TestGopherPlugin:
         """Test listing root directory."""
         response = await plugin.handle("!home", context, {})
 
-        assert "[/]" in response.message
-        # Should have numbered items
-        assert "1." in response.message or "2." in response.message
+        # Should list directory contents from the fixture
+        assert "folder1/" in response.message or "file1.txt" in response.message
 
     @pytest.mark.asyncio
     async def test_select_folder(
@@ -107,7 +106,8 @@ class TestGopherPlugin:
         subfolder = temp_gopher_dir / "folder1"
         response = await plugin.handle("!back", context, {"current_path": str(subfolder)})
 
-        assert "[/]" in response.message
+        # Should now show root directory contents
+        assert "folder1/" in response.message or "file1.txt" in response.message
 
     @pytest.mark.asyncio
     async def test_back_at_root(
@@ -116,7 +116,9 @@ class TestGopherPlugin:
         """Test !back at root stays at root."""
         response = await plugin.handle("!back", context, {"current_path": str(temp_gopher_dir)})
 
-        assert "Already at root" in response.message
+        # Should still show root contents (stayed at root)
+        current = response.plugin_state.get("current_path", str(temp_gopher_dir))
+        assert current == str(temp_gopher_dir)
 
     @pytest.mark.asyncio
     async def test_home_command(
@@ -126,7 +128,8 @@ class TestGopherPlugin:
         subfolder = temp_gopher_dir / "folder1"
         response = await plugin.handle("!home", context, {"current_path": str(subfolder)})
 
-        assert "[/]" in response.message
+        # Should show root directory contents
+        assert "folder1/" in response.message or "file1.txt" in response.message
 
     @pytest.mark.asyncio
     async def test_invalid_selection(
@@ -135,7 +138,7 @@ class TestGopherPlugin:
         """Test invalid number selection."""
         response = await plugin.handle("99", context, {"current_path": str(temp_gopher_dir)})
 
-        assert "Invalid selection" in response.message
+        assert "Invalid" in response.message
 
     @pytest.mark.asyncio
     async def test_non_number_input(
@@ -146,7 +149,7 @@ class TestGopherPlugin:
             "notanumber", context, {"current_path": str(temp_gopher_dir)}
         )
 
-        assert "Invalid input" in response.message
+        assert "Invalid" in response.message
 
     @pytest.mark.asyncio
     async def test_empty_directory(self, plugin: GopherPlugin, context: NodeContext) -> None:

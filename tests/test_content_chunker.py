@@ -62,14 +62,14 @@ class TestContentChunker:
 
         chunks = chunker.chunk(text)
 
-        # First chunk should end with [...]
-        assert chunks[0].endswith("[...]")
+        # First chunk should end with continuation marker
+        assert chunks[0].endswith(ContentChunker.MORE_MARKER.lstrip())
         # Middle chunks should have both markers
         if len(chunks) > 2:
-            assert chunks[1].startswith("[...]")
-            assert chunks[1].endswith("[...]")
-        # Last chunk should start with [...]
-        assert chunks[-1].startswith("[...]")
+            assert chunks[1].startswith(ContentChunker.CONT_MARKER.rstrip())
+            assert chunks[1].endswith(ContentChunker.MORE_MARKER.lstrip())
+        # Last chunk should start with continuation marker
+        assert chunks[-1].startswith(ContentChunker.CONT_MARKER.rstrip())
 
     def test_word_boundary_break(self) -> None:
         """Test chunker prefers word boundaries."""

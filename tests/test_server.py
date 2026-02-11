@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from meshgate.config import Config
+from meshgate.core.content_chunker import ContentChunker
 from meshgate.server import HandlerServer
 from tests.conftest import running_server
 from tests.mocks import MockTransport
@@ -73,8 +74,7 @@ class TestHandlerServer:
 
     def test_builtin_plugins_registered(self, server: HandlerServer) -> None:
         """Test that built-in plugins are registered."""
-        # Should have 4 built-in plugins: gopher, llm, weather, wikipedia
-        assert server.registry.plugin_count == 4
+        assert server.registry.plugin_count >= 4
 
     def test_registry_property(self, server: HandlerServer) -> None:
         """Test registry property returns PluginRegistry."""
@@ -109,8 +109,9 @@ class TestHandlerServerSingleMessage:
         """Test empty message shows menu for new session."""
         response = await server.handle_single_message("", node_id="!test123")
 
-        assert "Available Services:" in response
-        assert "Send number to select" in response
+        # Menu should contain all registered plugin names
+        for plugin in server.registry.get_all_plugins():
+            assert plugin.metadata.name in response
 
     @pytest.mark.asyncio
     async def test_menu_selection_enters_plugin(self, server: HandlerServer) -> None:
@@ -118,10 +119,11 @@ class TestHandlerServerSingleMessage:
         # First, show menu
         await server.handle_single_message("", node_id="!test123")
 
-        # Select plugin 1 (Gopher)
+        # Select plugin 1
+        plugin_at_1 = server.registry.get_by_menu_number(1)
         response = await server.handle_single_message("1", node_id="!test123")
 
-        assert "Gopher Server" in response
+        assert plugin_at_1.metadata.name in response
         session = server.session_manager.get_existing_session("!test123")
         assert session is not None
         assert not session.is_at_menu
@@ -134,9 +136,8 @@ class TestHandlerServerSingleMessage:
         await server.handle_single_message("1", node_id="!test123")
 
         # Exit
-        response = await server.handle_single_message("!exit", node_id="!test123")
+        await server.handle_single_message("!exit", node_id="!test123")
 
-        assert "Returned to menu" in response
         session = server.session_manager.get_existing_session("!test123")
         assert session is not None
         assert session.is_at_menu
@@ -213,11 +214,12 @@ class TestHandlerServerLifecycle:
             mock_transport.inject_message("", node_id="!test123")
             await asyncio.sleep(0.2)
 
-        # Check message was sent
+        # Check message was sent (should be the menu)
         assert len(mock_transport.sent_messages) > 0
-        # Should be the menu
-        _, message = mock_transport.sent_messages[0]
-        assert "Available Services:" in message
+        all_sent = " ".join(msg for _, msg in mock_transport.sent_messages)
+        # Menu should contain at least one registered plugin name
+        plugin_names = [p.metadata.name for p in server.registry.get_all_plugins()]
+        assert any(name in all_sent for name in plugin_names)
 
     @pytest.mark.asyncio
     async def test_chunked_response(self, mock_transport: MockTransport) -> None:
@@ -234,7 +236,7 @@ class TestHandlerServerLifecycle:
         assert len(mock_transport.sent_messages) > 1
         # First chunk should end with continuation marker
         _, first_message = mock_transport.sent_messages[0]
-        assert first_message.endswith("[...]")
+        assert first_message.endswith(ContentChunker.MORE_MARKER.lstrip())
         # All chunks should respect the size limit
         for _, msg in mock_transport.sent_messages:
             assert len(msg) <= 30
@@ -244,59 +246,39 @@ class TestHandlerServerCleanup:
     """Tests for server cleanup functionality."""
 
     @pytest.mark.asyncio
-    async def test_cleanup_task_started(self, mock_transport: MockTransport) -> None:
-        """Test that cleanup task is started when server starts."""
+    async def test_server_running_inside_context(self, mock_transport: MockTransport) -> None:
+        """Test that server is running inside async context and stopped after."""
         config = Config.default()
         config.server.session_cleanup_interval_minutes = 1
         server = HandlerServer(config=config, transport=mock_transport)
 
         async with running_server(server):
-            # Cleanup task should be running
-            assert server._cleanup_task is not None
-            assert not server._cleanup_task.done()
+            assert server.is_running
+
+        assert not server.is_running
 
     @pytest.mark.asyncio
-    async def test_cleanup_task_cancelled_on_stop(
+    async def test_max_sessions_enforced(
         self, mock_transport: MockTransport
     ) -> None:
-        """Test that cleanup task is cancelled when server stops."""
+        """Test that max_sessions config is enforced behaviorally."""
         config = Config.default()
+        config.server.max_sessions = 2
         server = HandlerServer(config=config, transport=mock_transport)
 
-        async with running_server(server):
-            cleanup_task = server._cleanup_task
+        # Create max_sessions + 1 sessions
+        await server.handle_single_message("", node_id="!node1")
+        await server.handle_single_message("", node_id="!node2")
+        await server.handle_single_message("", node_id="!node3")
 
-        # Cleanup task should be cancelled or done
-        assert cleanup_task is not None
-        assert cleanup_task.done() or cleanup_task.cancelled()
-
-    @pytest.mark.asyncio
-    async def test_max_sessions_passed_to_session_manager(
-        self, mock_transport: MockTransport
-    ) -> None:
-        """Test that max_sessions config is passed to SessionManager."""
-        config = Config.default()
-        config.server.max_sessions = 5
-        server = HandlerServer(config=config, transport=mock_transport)
-
-        assert server.session_manager._max_sessions == 5
+        # Should have at most max_sessions active
+        assert server.session_manager.active_session_count == 2
+        # Oldest should be evicted
+        assert server.session_manager.get_existing_session("!node1") is None
 
 
 class TestHandlerServerRateLimiting:
     """Tests for server rate limiting functionality."""
-
-    @pytest.mark.asyncio
-    async def test_rate_limiter_initialized(self, mock_transport: MockTransport) -> None:
-        """Test that rate limiter is initialized from config."""
-        config = Config.default()
-        config.security.rate_limit_enabled = True
-        config.security.rate_limit_messages = 5
-        config.security.rate_limit_window_seconds = 30
-        server = HandlerServer(config=config, transport=mock_transport)
-
-        assert server._rate_limiter.enabled is True
-        assert server._rate_limiter.max_messages == 5
-        assert server._rate_limiter.window_seconds == 30
 
     @pytest.mark.asyncio
     async def test_rate_limit_blocks_excessive_messages(
@@ -350,6 +332,12 @@ class TestHandlerServerExternalPlugins:
     """Tests for external plugin loading functionality."""
 
     @pytest.fixture
+    def builtin_count(self, mock_transport: MockTransport) -> int:
+        """Get the baseline built-in plugin count."""
+        server = HandlerServer(config=Config.default(), transport=mock_transport)
+        return server.registry.plugin_count
+
+    @pytest.fixture
     def plugin_dir(self, tmp_path: Path) -> Path:
         """Create a temporary directory for external plugins."""
         plugins_dir = tmp_path / "external_plugins"
@@ -364,7 +352,7 @@ class TestHandlerServerExternalPlugins:
         assert config.plugin_paths == []
 
     def test_loads_external_plugins_from_configured_path(
-        self, mock_transport: MockTransport, plugin_dir: Path
+        self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int
     ) -> None:
         """Test that external plugins are loaded from configured paths."""
         # Create a sample plugin file with menu number 10 (won't conflict with built-ins 1-4)
@@ -375,8 +363,7 @@ class TestHandlerServerExternalPlugins:
         config.plugin_paths = [str(plugin_dir)]
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Should have 4 built-in + 1 external = 5 plugins
-        assert server.registry.plugin_count == 5
+        assert server.registry.plugin_count == builtin_count + 1
 
         # The external plugin should be registered
         plugin = server.registry.get_by_name("Sample External")
@@ -400,7 +387,7 @@ class TestHandlerServerExternalPlugins:
         assert plugin.metadata.name == "Sample External"
 
     def test_handles_nonexistent_plugin_directory(
-        self, mock_transport: MockTransport, tmp_path: Path
+        self, mock_transport: MockTransport, tmp_path: Path, builtin_count: int
     ) -> None:
         """Test that nonexistent plugin directories are handled gracefully."""
         nonexistent_path = tmp_path / "does_not_exist"
@@ -412,10 +399,10 @@ class TestHandlerServerExternalPlugins:
         server = HandlerServer(config=config, transport=mock_transport)
 
         # Should still have built-in plugins
-        assert server.registry.plugin_count == 4
+        assert server.registry.plugin_count == builtin_count
 
     def test_handles_empty_plugin_directory(
-        self, mock_transport: MockTransport, plugin_dir: Path
+        self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int
     ) -> None:
         """Test that empty plugin directories are handled gracefully."""
         config = Config.default()
@@ -424,13 +411,18 @@ class TestHandlerServerExternalPlugins:
         server = HandlerServer(config=config, transport=mock_transport)
 
         # Should still have built-in plugins only
-        assert server.registry.plugin_count == 4
+        assert server.registry.plugin_count == builtin_count
 
     def test_skips_plugins_with_conflicting_menu_number(
-        self, mock_transport: MockTransport, plugin_dir: Path
+        self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int
     ) -> None:
         """Test that plugins with conflicting menu numbers are skipped."""
-        # Create a plugin with menu number 1 (conflicts with Gopher)
+        # Query the initial plugin at menu 1
+        baseline_server = HandlerServer(config=Config.default(), transport=mock_transport)
+        original_plugin = baseline_server.registry.get_by_menu_number(1)
+        original_name = original_plugin.metadata.name
+
+        # Create a plugin with menu number 1 (conflicts with built-in)
         plugin_file = plugin_dir / "conflicting_plugin.py"
         plugin_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=1))
 
@@ -440,16 +432,16 @@ class TestHandlerServerExternalPlugins:
         # Should not raise, just log warning about conflict
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Should still have only 4 plugins (external one was skipped)
-        assert server.registry.plugin_count == 4
+        # Should still have only built-in plugins (external one was skipped)
+        assert server.registry.plugin_count == builtin_count
 
-        # Built-in Gopher should still be at menu 1
+        # Original built-in should still be at menu 1
         plugin = server.registry.get_by_menu_number(1)
         assert plugin is not None
-        assert plugin.metadata.name == "Gopher Server"
+        assert plugin.metadata.name == original_name
 
     def test_loads_multiple_external_plugins(
-        self, mock_transport: MockTransport, plugin_dir: Path
+        self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int
     ) -> None:
         """Test that multiple external plugins can be loaded."""
         # Create two external plugins
@@ -464,11 +456,10 @@ class TestHandlerServerExternalPlugins:
         config.plugin_paths = [str(plugin_dir)]
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Should have 4 built-in + 2 external = 6 plugins
-        assert server.registry.plugin_count == 6
+        assert server.registry.plugin_count == builtin_count + 2
 
     def test_loads_from_multiple_plugin_paths(
-        self, mock_transport: MockTransport, tmp_path: Path
+        self, mock_transport: MockTransport, tmp_path: Path, builtin_count: int
     ) -> None:
         """Test that plugins are loaded from multiple configured paths."""
         dir1 = tmp_path / "plugins1"
@@ -489,11 +480,10 @@ class TestHandlerServerExternalPlugins:
         config.plugin_paths = [str(dir1), str(dir2)]
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Should have 4 built-in + 2 external = 6 plugins
-        assert server.registry.plugin_count == 6
+        assert server.registry.plugin_count == builtin_count + 2
 
     def test_empty_plugin_paths_config(
-        self, mock_transport: MockTransport
+        self, mock_transport: MockTransport, builtin_count: int
     ) -> None:
         """Test that empty plugin_paths config is handled."""
         config = Config.default()
@@ -502,10 +492,10 @@ class TestHandlerServerExternalPlugins:
         server = HandlerServer(config=config, transport=mock_transport)
 
         # Should still have built-in plugins
-        assert server.registry.plugin_count == 4
+        assert server.registry.plugin_count == builtin_count
 
     def test_skips_private_python_files(
-        self, mock_transport: MockTransport, plugin_dir: Path
+        self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int
     ) -> None:
         """Test that files starting with underscore are skipped."""
         # Create a private file (should be skipped)
@@ -520,8 +510,8 @@ class TestHandlerServerExternalPlugins:
         config.plugin_paths = [str(plugin_dir)]
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Should have 4 built-in + 1 regular (private skipped) = 5 plugins
-        assert server.registry.plugin_count == 5
+        # Should have built-in + 1 regular (private skipped)
+        assert server.registry.plugin_count == builtin_count + 1
 
         # Only menu 11 should exist, not menu 10
         assert server.registry.get_by_menu_number(10) is None

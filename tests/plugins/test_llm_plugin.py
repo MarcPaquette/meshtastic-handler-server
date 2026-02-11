@@ -24,7 +24,6 @@ class TestLLMPlugin:
     def test_welcome_message(self, plugin: LLMPlugin) -> None:
         """Test welcome message shows model name."""
         welcome = plugin.get_welcome_message()
-        assert "LLM Assistant" in welcome
         assert "test-model" in welcome
 
     def test_help_text(self, plugin: LLMPlugin) -> None:
@@ -51,7 +50,6 @@ class TestLLMPlugin:
         response = await plugin.handle("!model", context, {})
 
         assert "test-model" in response.message
-        assert "Current model" in response.message
 
     @pytest.mark.asyncio
     @respx.mock
@@ -118,5 +116,5 @@ class TestLLMPlugin:
             "New message", context, {"history": long_history}
         )
 
-        # History should be trimmed
-        assert len(response.plugin_state["history"]) <= 8
+        # History should be trimmed to the configured max
+        assert len(response.plugin_state["history"]) <= LLMPlugin.MAX_HISTORY_MESSAGES

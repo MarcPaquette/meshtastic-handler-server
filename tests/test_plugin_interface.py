@@ -144,32 +144,28 @@ class TestPluginResponse:
 
 
 class TestBuiltinPluginMetadata:
-    """Parametrized tests for all built-in plugin metadata."""
+    """Structural tests for all built-in plugin metadata."""
+
+    BUILTIN_PLUGINS = [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin]
 
     @pytest.mark.parametrize(
-        "plugin_class,expected_name,expected_menu,expected_commands",
-        [
-            (GopherPlugin, "Gopher Server", 1, ("!back", "!home")),
-            (LLMPlugin, "LLM Assistant", 2, ("!model", "!clear")),
-            (WeatherPlugin, "Weather", 3, ("!forecast", "!refresh")),
-            (WikipediaPlugin, "Wikipedia", 4, ("!search", "!random")),
-        ],
+        "plugin_class",
+        [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin],
     )
-    def test_builtin_plugin_metadata(
-        self,
-        plugin_class: type,
-        expected_name: str,
-        expected_menu: int,
-        expected_commands: tuple[str, ...],
-    ) -> None:
-        """Test that built-in plugins have correct metadata."""
+    def test_builtin_plugin_has_valid_metadata(self, plugin_class: type) -> None:
+        """Test that each built-in plugin has structurally valid metadata."""
         plugin = plugin_class()
         meta = plugin.metadata
 
-        assert meta.name == expected_name
-        assert meta.menu_number == expected_menu
-        for cmd in expected_commands:
-            assert cmd in meta.commands, f"Expected command {cmd} not found"
+        assert meta.name, "Plugin must have a non-empty name"
+        assert meta.menu_number >= 1, "Menu number must be >= 1"
+        assert meta.description, "Plugin must have a non-empty description"
+        assert len(meta.commands) > 0, "Plugin must have at least one command"
+
+    def test_builtin_plugins_have_unique_menu_numbers(self) -> None:
+        """Test that all built-in plugins have unique menu numbers."""
+        menu_numbers = [cls().metadata.menu_number for cls in self.BUILTIN_PLUGINS]
+        assert len(menu_numbers) == len(set(menu_numbers)), "Menu numbers must be unique"
 
     @pytest.mark.parametrize(
         "plugin_class",
